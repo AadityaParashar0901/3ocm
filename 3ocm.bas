@@ -71,10 +71,6 @@ Function Compress$ (I$)
     O$ = String$(Len(I$), 0)
     B_OFFSET = 1
     O_OFFSET = 1
-    $If DEBUG Then
-            If _FileExists("logc.txt") Then Kill "logc.txt"
-            Open "logc.txt" For Binary As #3
-    $End If
     For I = 1 To Len(I$)
         B = Asc(I$, I)
         C_I = _SHL(B3, 16) Or _SHL(B2, 8) Or B1
@@ -82,10 +78,6 @@ Function Compress$ (I$)
             Case 0:
                 Asc(B$, B_OFFSET) = _SetBit(Asc(B$, B_OFFSET), J)
                 Asc(O$, O_OFFSET) = B: O_OFFSET = O_OFFSET + 1
-                $If DEBUG Then
-                        T$ = "I:" + NewHex$(I, 2) + ": C(C_I) = " + NewHex$(C(C_I), 2) + ", C_I = " + NewHex$(C_I, 6) + ", B = " + NewHex$(B, 2) + MKI$(&H0A0D)
-                        Put #3, , T$
-                $End If
                 C(C_I) = B
         End Select
         J = J + 1
@@ -94,9 +86,6 @@ Function Compress$ (I$)
         B2 = B1
         B1 = B
     Next I
-    $If DEBUG Then
-            Close #3
-    $End If
     O_OFFSET = O_OFFSET - 1
     O$ = Left$(O$, O_OFFSET)
     B$ = Left$(B$, B_OFFSET)
