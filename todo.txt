@@ -1,0 +1,2 @@
+add lzma
+add bit compression for \xff
