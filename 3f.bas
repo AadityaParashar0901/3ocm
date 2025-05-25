@@ -4,11 +4,12 @@ Type Entry
     As _Unsigned Long Size, CSize
     As _Unsigned Long Hash
 End Type
+Dim Shared As String DICTIONARY
 Dim Shared As _Unsigned _Byte C(0 To 16777215)
 FILE_EXT$ = ".3f"
 Dim Shared As _Unsigned Long BLOCK_SIZE: BLOCK_SIZE = 1048576
 Dim Shared As _Unsigned _Byte DEFLATE_MODE: DEFLATE_MODE = 1
-Dim As _Unsigned Long I, J
+Dim As _Unsigned Long I, J, Seed
 Select Case Command$(1)
     Case "-a": COMMAND = 1
     Case "-x": COMMAND = 2
@@ -26,10 +27,10 @@ Select Case Command$(1)
         Print "    -e [] Encrypt"
         Print "    -d [] Decrypt"
         Print "Options:"
-        Print "    -b [] Block Size"
-        Print "    -d [] Dictionary"
-        Print "    -od []Output Dictionary"
-        Print "    -rd   Random Dictionary"
+        Print "    -b []     Block Size"
+        Print "    -d []     Dictionary"
+        Print "    -od []    Output Dictionary"
+        Print "    -rd []    Random Dictionary"
         Print "    --deflate"
         Print "    --no-deflate"
 End Select
@@ -43,16 +44,30 @@ For I = 2 To _CommandCount
             If _FileExists(INFILE$) = 0 Then Print Command$(I); " does not exists.": _Continue
             Print "Reading Dictionary from File "; INFILE$
             Open INFILE$ For Binary As #1
-            Get #1, , C()
+            D$ = String$(LOF(1), 0)
+            Get #1, , D$
             Close #1
+            DICTIONARY = OneByteDecode(D$)
+            D$ = ""
+            For J = 0 To 16777215
+                C(J) = Asc(DICTIONARY, J + 1)
+            Next J
         Case "-od": INFILE$ = Command$(I + 1): I = I + 1
             Print "Writing Dictionary to File "; INFILE$
+            DICTIONARY = String$(16777216, 0)
+            For J = 0 To 16777215
+                Asc(DICTIONARY, J + 1) = C(J)
+            Next J
+            D$ = OneByteEncode(DICTIONARY)
+            If _FileExists(INFILE$) Then Kill INFILE$
             Open INFILE$ For Binary As #1
-            Put #1, , C()
+            Put #1, , D$
             Close #1
-        Case "-rd": Print "Creating Random Dictionary"
-            For J = LBound(C) To UBound(C)
-                Randomize Timer
+        Case "-rd": Seed = Val(Command$(I + 1)): I = I + 1
+            If Seed = 0 Then Seed = Timer
+            Print "Creating Random Dictionary"
+            For J = 0 To 16777215
+                Randomize Seed
                 C(J) = Int(Rnd * 256)
             Next J
         Case "--deflate": DEFLATE_MODE = 1
@@ -136,7 +151,7 @@ Function Compress$ (I$)
         Select Case C(C_I) = B
             Case 0:
                 Asc(B$, B_OFFSET) = _SetBit(Asc(B$, B_OFFSET), J)
-                Asc(O$, O_OFFSET) = C(C_I) Xor B: O_OFFSET = O_OFFSET + 1
+                Asc(O$, O_OFFSET) = B - C(C_I): O_OFFSET = O_OFFSET + 1
                 C(C_I) = B
         End Select
         J = J + 1
@@ -172,13 +187,14 @@ Function Decompress$ (I$)
     O_OFFSET = 1
     B_OFFSET = 1
     T$ = String$((Len(B$) + (K > 0)) * 8 + K, 0)
+    $Checking:Off
     For I = 1 To Len(T$)
         C_I = _SHL(B3, 16) Or _SHL(B2, 8) Or B1
         Select Case _ReadBit(Asc(B$, B_OFFSET), J)
             Case 0: Asc(T$, I) = C(C_I)
                 B = C(C_I)
             Case Else:
-                B = Asc(O$, O_OFFSET) Xor C(C_I): O_OFFSET = O_OFFSET + 1
+                B = Asc(O$, O_OFFSET) + C(C_I): O_OFFSET = O_OFFSET + 1
                 Asc(T$, I) = B
                 C(C_I) = B
         End Select
@@ -188,6 +204,7 @@ Function Decompress$ (I$)
         B2 = B1
         B1 = B
     Next I
+    $Checking:On
     O$ = ""
     B$ = ""
     Decompress$ = T$
