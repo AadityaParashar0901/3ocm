@@ -104,7 +104,7 @@ For I = 2 To _CommandCount
                     Locate Y%, 1: Print "Ratio: "; Round(100 * LOF(2) / LOF(1)); "% => "; PrintSize$(LOF(1)); " -> "; PrintSize$(LOF(2)); Space$(80)
                     Print "Time: "; PrintTime$(Timer(0.001) - ST!); Space$(80)
                     Print Space$(100)
-                    Locate Y% + 1, 1
+                    Locate Y% + 2, 1
                     Close
                 Case 2
                     Print "Decompressing "; INFILE$; " -> "; INFILE$ + ".out"
