@@ -124,18 +124,19 @@ Function Compress$ (I$)
     Dim As _Unsigned Long I, B_OFFSET, O_OFFSET
     Dim As _Unsigned _Byte B, B1, B2, B3
     Dim As _Unsigned Long C_I
-    Dim As _Unsigned _Bit * 3 J, K: J = 0
+    Dim As _Unsigned _Bit * 3 J: J = 0
     B$ = String$(Remain(Len(I$), 8), 0)
     O$ = String$(Len(I$), 0)
     B_OFFSET = 1
     O_OFFSET = 1
+    $Checking:Off
     For I = 1 To Len(I$)
         B = Asc(I$, I)
         C_I = _SHL(B3, 16) Or _SHL(B2, 8) Or B1
         Select Case C(C_I) = B
             Case 0:
                 Asc(B$, B_OFFSET) = _SetBit(Asc(B$, B_OFFSET), J)
-                Asc(O$, O_OFFSET) = B: O_OFFSET = O_OFFSET + 1
+                Asc(O$, O_OFFSET) = C(C_I) Xor B: O_OFFSET = O_OFFSET + 1
                 C(C_I) = B
         End Select
         J = J + 1
@@ -144,12 +145,13 @@ Function Compress$ (I$)
         B2 = B1
         B1 = B
     Next I
+    $Checking:On
     O_OFFSET = O_OFFSET - 1
     O$ = Left$(O$, O_OFFSET)
     B$ = Left$(B$, B_OFFSET)
     If DEFLATE_MODE Then
-        O$ = _Deflate$(Left$(O$, O_OFFSET))
-        B$ = _Deflate$(Left$(B$, B_OFFSET))
+        O$ = OneByteEncode$(O$) 'O$ = _Deflate$(O$)
+        B$ = _Deflate$(B$)
     End If
     Compress$ = MKL$(Len(O$)) + Chr$(J) + O$ + B$
     O$ = ""
@@ -157,14 +159,14 @@ Function Compress$ (I$)
 End Function
 Function Decompress$ (I$)
     Dim As _Unsigned Long I, B_OFFSET, O_OFFSET
-    Dim As _Unsigned _Byte B, B1, B2, B3, L
+    Dim As _Unsigned _Byte B, B1, B2, B3
     Dim As _Unsigned Long C_I
     Dim As _Unsigned _Bit * 3 J, K: J = 0
     O$ = Mid$(I$, 6, CVL(Left$(I$, 4)))
     B$ = Mid$(I$, 6 + Len(O$))
     K = Asc(I$, 5)
     If DEFLATE_MODE Then
-        O$ = _Inflate$(O$)
+        O$ = OneByteDecode$(O$)
         B$ = _Inflate$(B$)
     End If
     O_OFFSET = 1
@@ -176,7 +178,7 @@ Function Decompress$ (I$)
             Case 0: Asc(T$, I) = C(C_I)
                 B = C(C_I)
             Case Else:
-                B = Asc(O$, O_OFFSET): O_OFFSET = O_OFFSET + 1
+                B = Asc(O$, O_OFFSET) Xor C(C_I): O_OFFSET = O_OFFSET + 1
                 Asc(T$, I) = B
                 C(C_I) = B
         End Select
@@ -218,6 +220,61 @@ Function PrintSize$ (__T As _Unsigned Long)
         Case 2: PrintSize$ = _Trim$(Str$(Round(__T / _SHL(1, 20)))) + " MB"
         Case 3: PrintSize$ = _Trim$(Str$(Round(__T / _SHL(1, 30)))) + " GB"
     End Select
+End Function
+Function OneByteEncode$ (__I$)
+    Dim As _Unsigned _Byte __ONEBYTE, __C
+    Dim As _Unsigned Long __BYTE_BUFFER_OFFSET, __POSITION_BUFFER_OFFSET, __I, __LENA, __Frequency_Table(0 To 255)
+    Dim __J As _Unsigned _Bit * 3
+    Dim As String __BYTE_BUFFER, __POSITION_BUFFER
+    __LENA = Len(__I$)
+    For __I = 1 To __LENA
+        __BYTE~%% = Asc(__I$, __I)
+        __Frequency_Table(__BYTE~%%) = __Frequency_Table(__BYTE~%%) + 1
+    Next __I
+    For __BI~%% = 0 To 255
+        If __Frequency_Table(__BI~%%) > __Frequency_Table(__ONEBYTE) Then __ONEBYTE = __BI~%%
+    Next __BI~%%
+    __BYTE_BUFFER = String$(Len(__I$), 0): __POSITION_BUFFER = String$(Remain(Len(__I$), 8) + 1, 0)
+    For __I = 1 To Len(__I$)
+        __C = Asc(__I$, __I): If __J = 0 Then __POSITION_BUFFER_OFFSET = __POSITION_BUFFER_OFFSET + 1
+        If __C <> __ONEBYTE Then
+            Asc(__POSITION_BUFFER, __POSITION_BUFFER_OFFSET) = _SetBit(Asc(__POSITION_BUFFER, __POSITION_BUFFER_OFFSET), __J)
+            __BYTE_BUFFER_OFFSET = __BYTE_BUFFER_OFFSET + 1: Asc(__BYTE_BUFFER, __BYTE_BUFFER_OFFSET) = __C
+        End If
+        __J = __J + 1
+    Next __I
+    __POSITION_BUFFER = _Deflate$(Left$(__POSITION_BUFFER, __POSITION_BUFFER_OFFSET))
+    __BYTE_BUFFER = _Deflate$(Left$(__BYTE_BUFFER, __BYTE_BUFFER_OFFSET))
+    OneByteEncode$ = MKL$(Len(__I$)) + MKL$(Len(__POSITION_BUFFER)) + MKL$(Len(__BYTE_BUFFER)) + Chr$(__ONEBYTE) + __POSITION_BUFFER + __BYTE_BUFFER
+    __POSITION_BUFFER = ""
+    __BYTE_BUFFER = ""
+End Function
+Function OneByteDecode$ (__I$)
+    Dim As _Unsigned Long __I, __BYTE_BUFFER_OFFSET, __POSITION_BUFFER_OFFSET
+    Dim As _Unsigned _Bit * 3 __J
+    Dim As String __BYTE_BUFFER, __POSITION_BUFFER, __OUT_BUFFER
+    __OUT_LENGTH~& = CVL(Left$(__I$, 4))
+    __POSITION_BUFFER_DEFLATE_LENGTH~& = CVL(Mid$(__I$, 5, 4))
+    __BYTE_BUFFER_DEFLATE_LENGTH~& = CVL(Mid$(__I$, 9, 4))
+    __ONEBYTE~%% = Asc(__I$, 13)
+    __POSITION_BUFFER = _Inflate$(Mid$(__I$, 14, __POSITION_BUFFER_DEFLATE_LENGTH~&))
+    __BYTE_BUFFER = _Inflate$(Mid$(__I$, 14 + __POSITION_BUFFER_DEFLATE_LENGTH~&, __BYTE_BUFFER_DEFLATE_LENGTH~&))
+    __OUT_BUFFER = String$(__OUT_LENGTH~&, 0)
+    __POSITION_BUFFER_OFFSET = 0
+    __BYTE_BUFFER_OFFSET = 0
+    For __I = 1 To __OUT_LENGTH~&
+        If __J = 0 Then __POSITION_BUFFER_OFFSET = __POSITION_BUFFER_OFFSET + 1
+        If _ReadBit(Asc(__POSITION_BUFFER, __POSITION_BUFFER_OFFSET), __J) Then
+            __BYTE_BUFFER_OFFSET = __BYTE_BUFFER_OFFSET + 1
+            Asc(__OUT_BUFFER, __I) = Asc(__BYTE_BUFFER, __BYTE_BUFFER_OFFSET)
+        Else
+            Asc(__OUT_BUFFER, __I) = __ONEBYTE~%%
+        End If
+        __J = __J + 1
+    Next __I
+    __POSITION_BUFFER = ""
+    __BYTE_BUFFER = ""
+    OneByteDecode = __OUT_BUFFER
 End Function
 '$Include:'include\min.bm'
 '$Include:'include\crc32.bm'
