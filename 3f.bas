@@ -74,7 +74,8 @@ For I = 2 To _CommandCount
             Print "Using Deflate"
         Case "--no-deflate": DEFLATE_MODE = 0
             Print "Not Using Deflate"
-        Case Else: INFILE$ = Command$(I)
+        Case Else:
+            INFILE$ = Command$(I)
             If _FileExists(INFILE$) = 0 Then INFILE$ = _StartDir$ + "\" + INFILE$
             If _FileExists(INFILE$) = 0 Then Print Command$(I); " does not exists.": _Continue
             Open INFILE$ For Binary As #1
@@ -91,18 +92,19 @@ For I = 2 To _CommandCount
                         Put #2, , I$
                         P = Round(100 * (Seek(1) - 1) / LOF(1))
                         Locate Y%, 1: Print "[" + String$(P, 45) + Space$(100 - P) + "]"; P; "% "
-                        Print " Ratio | Speed | Remaining Time | Elapsed Time | Processed | Compressed Size"
+                        Print " Ratio | Speed | Remaining Time | Elapsed Time | Processed | Compressed Size | Estimated Compressed Size"
                         T$ = _Trim$(Str$(Round(100 * LOF(2) / (Seek(1) - 1)))) + "%"
-                        T$ = T$ + Space$(8 - Len(T$)) + PrintSize$(Round((Seek(1) - 1) / (Timer(0.001) - ST!))) + "/s"
-                        T$ = T$ + Space$(22 - Len(T$)) + PrintTime$(Round((Timer(0.001) - ST!) * (LOF(1) / (Seek(1) - 1) - 1)))
-                        T$ = T$ + Space$(38 - Len(T$)) + PrintTime$(Round(Timer(0.001) - ST!))
+                        T$ = T$ + Space$(8 - Len(T$)) + PrintSize$((Seek(1) - 1) / (Timer(0.001) - ST!)) + "/s"
+                        T$ = T$ + Space$(22 - Len(T$)) + PrintTime$((Timer(0.001) - ST!) * (LOF(1) / (Seek(1) - 1) - 1))
+                        T$ = T$ + Space$(38 - Len(T$)) + PrintTime$(Timer(0.001) - ST!)
                         T$ = T$ + Space$(50 - Len(T$)) + PrintSize$(Seek(1) - 1)
                         T$ = T$ + Space$(65 - Len(T$)) + PrintSize$(LOF(2))
-                        Print T$ + Space$(78 - Len(T$))
+                        T$ = T$ + Space$(86 - Len(T$)) + PrintSize$(LOF(1) * LOF(2) / (Seek(1) - 1))
+                        Print T$ + Space$(98 - Len(T$))
                         If LOF(1) < Seek(1) Then Exit Do
                     Loop
                     Locate Y%, 1: Print "Ratio: "; Round(100 * LOF(2) / LOF(1)); "% => "; PrintSize$(LOF(1)); " -> "; PrintSize$(LOF(2)); Space$(80)
-                    Print "Time: "; PrintTime$(Timer(0.001) - ST!); Space$(80)
+                    Print "Time: "; PrintTime$(Timer(0.001) - ST!); Space$(98)
                     Print Space$(100)
                     Locate Y% + 2, 1
                     Close
@@ -119,14 +121,14 @@ For I = 2 To _CommandCount
                         O$ = Decompress$(I$)
                         Put #2, , O$
                         P = Round(100 * (Seek(1) - 1) / LOF(1))
-                        Locate Y%, 1: Print "[" + String$(P, 45) + Space$(100 - P) + "]"
+                        Locate Y%, 1: Print "[" + String$(P, 45) + Space$(100 - P) + "]"; P; "% "
                         Print " Speed | Elapsed Time"
-                        T$ = Space$(3) + PrintTime$(Round(Timer(0.001) - LT!))
-                        T$ = T$ + Space$(13 - Len(T$)) + PrintTime$(Round(Timer(0.001) - ST!))
+                        T$ = Space$(2) + PrintTime$(Timer(0.001) - LT!)
+                        T$ = T$ + Space$(12 - Len(T$)) + PrintTime$(Timer(0.001) - ST!)
                         T$ = T$ + Space$(22 - Len(T$))
                         Print T$
                     Loop
-                    Locate Y%, 1: Print "Time: "; Timer(0.001) - ST!: Print
+                    Locate Y%, 1: Print "Time: "; PrintTime$(Timer(0.001) - ST!); Space$(80): Print
                     Locate Y% + 1, 1
                     Close
                 Case 3
@@ -144,7 +146,6 @@ Function Compress$ (I$)
     O$ = String$(Len(I$), 0)
     B_OFFSET = 1
     O_OFFSET = 1
-    $Checking:Off
     For I = 1 To Len(I$)
         B = Asc(I$, I)
         C_I = _SHL(B3, 16) Or _SHL(B2, 8) Or B1
@@ -160,12 +161,11 @@ Function Compress$ (I$)
         B2 = B1
         B1 = B
     Next I
-    $Checking:On
     O_OFFSET = O_OFFSET - 1
     O$ = Left$(O$, O_OFFSET)
     B$ = Left$(B$, B_OFFSET)
     If DEFLATE_MODE Then
-        O$ = OneByteEncode$(O$) 'O$ = _Deflate$(O$)
+        O$ = OneByteEncode$(O$)
         B$ = _Deflate$(B$)
     End If
     Compress$ = MKL$(Len(O$)) + Chr$(J) + O$ + B$
@@ -187,7 +187,6 @@ Function Decompress$ (I$)
     O_OFFSET = 1
     B_OFFSET = 1
     T$ = String$((Len(B$) + (K > 0)) * 8 + K, 0)
-    $Checking:Off
     For I = 1 To Len(T$)
         C_I = _SHL(B3, 16) Or _SHL(B2, 8) Or B1
         Select Case _ReadBit(Asc(B$, B_OFFSET), J)
@@ -204,7 +203,6 @@ Function Decompress$ (I$)
         B2 = B1
         B1 = B
     Next I
-    $Checking:On
     O$ = ""
     B$ = ""
     Decompress$ = T$
@@ -260,8 +258,10 @@ Function OneByteEncode$ (__I$)
         End If
         __J = __J + 1
     Next __I
-    __POSITION_BUFFER = _Deflate$(Left$(__POSITION_BUFFER, __POSITION_BUFFER_OFFSET))
-    __BYTE_BUFFER = _Deflate$(Left$(__BYTE_BUFFER, __BYTE_BUFFER_OFFSET))
+    __POSITION_BUFFER = Left$(__POSITION_BUFFER, __POSITION_BUFFER_OFFSET)
+    __BYTE_BUFFER = Left$(__BYTE_BUFFER, __BYTE_BUFFER_OFFSET)
+    __POSITION_BUFFER = _Deflate$(__POSITION_BUFFER)
+    __BYTE_BUFFER = _Deflate$(__BYTE_BUFFER)
     OneByteEncode$ = MKL$(Len(__I$)) + MKL$(Len(__POSITION_BUFFER)) + MKL$(Len(__BYTE_BUFFER)) + Chr$(__ONEBYTE) + __POSITION_BUFFER + __BYTE_BUFFER
     __POSITION_BUFFER = ""
     __BYTE_BUFFER = ""

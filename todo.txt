@@ -1,2 +1,4 @@
+add br2
+add huffman
 add lzma
 add bit compression for \xff
