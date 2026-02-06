@@ -74,4 +74,4 @@ Function Decompress$ (I$)
     B$ = ""
     Decompress$ = T$
 End Function
-'$Include:'include\bytetobits.bm'
+'$Include:'include\bits.bm'
